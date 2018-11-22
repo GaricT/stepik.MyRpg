@@ -25,6 +25,11 @@ ally:
     action: restore_hp
     min-count: 0
     max-count: 3
+  spirit:
+    sprite: [NPC_4.png]
+    action: sunset_effect
+    min-count: 0
+    max-count: 1
 enemies:
   rat:
     sprite: [rat.png]
@@ -33,6 +38,13 @@ enemies:
     intelligence: 2
     luck: 1
     experience: 50
+  snake:
+    sprite: [snake.png]
+    strength: 7
+    endurance: 7
+    intelligence: 1
+    luck: 4
+    experience: 125
   knight:
     sprite: [Enemy_1.png]
     strength: 15

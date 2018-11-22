@@ -1,14 +1,31 @@
 from abc import ABC, abstractmethod
-import pygame
-import random
+from random import randint
 
 
-def create_sprite(img, sprite_size):
-    icon = pygame.image.load(img).convert_alpha()
-    icon = pygame.transform.scale(icon, (sprite_size, sprite_size))
-    sprite = pygame.Surface((sprite_size, sprite_size), pygame.HWSURFACE)
-    sprite.blit(icon, (0, 0))
-    return sprite
+class AbstractHeroFactory(ABC):
+    _sprite = None
+
+    @abstractmethod
+    def create(self):
+        pass
+
+
+class AbstractObject(ABC):
+    @abstractmethod
+    def __init__(self):
+        self._sprite = []
+
+    @abstractmethod
+    def draw(self, display):
+        pass
+
+    @property
+    def sprite(self):
+        return self._sprite[0]
+
+    @sprite.setter
+    def sprite(self, value):
+        self._sprite = value if isinstance(value, list) else [value]
 
 
 class Interactive(ABC):
@@ -18,47 +35,82 @@ class Interactive(ABC):
         pass
 
 
+class Creature(AbstractObject):
+
+    def __init__(self, icon, stats, position):
+        self._sprite = icon
+        self.stats = stats
+        self.position = position
+        self.hp = 0
+        self.max_hp = 0
+        self.calc_max_HP()
+        self.hp = self.max_hp
+
+    def calc_max_HP(self):
+        self.max_hp = 5 + self.stats["endurance"] * 2
+        if self.max_hp < self.hp:
+            self.hp = self.max_hp
+
+    def draw(self, display):
+        display.blit(self.sprite, ((self.position[0]) * display.engine.sprite_size,
+                                   (self.position[1]) * display.engine.sprite_size))
+
+
 class Ally(AbstractObject, Interactive):
 
     def __init__(self, icon, action, position):
-        self.sprite = icon
+        self._sprite = icon
         self.action = action
         self.position = position
 
     def interact(self, engine, hero):
         self.action(engine, hero)
 
+    def draw(self, display):
+        pass
 
-class Creature(AbstractObject):
 
-    def __init__(self, icon, stats, position):
-        self.sprite = icon
-        self.stats = stats
-        self.position = position
-        self.calc_max_HP()
-        self.hp = self.max_hp
+class Enemy(Creature, Interactive):
 
-    def calc_max_HP(self):
-        self.max_hp = 5 + self.stats["endurance"] * 2
+    def __init__(self, icon, stats, xp, position):
+        super().__init__(icon, stats, position)
+        self.xp = xp
+
+    def interact(self, engine, hero):
+        delta = (self.stats["strength"] + self.stats["endurance"]) / \
+                (hero.stats["strength"] + hero.stats["endurance"])
+        exp = self.xp
+        if delta > 1.25:
+            for i in range(hero.stats["luck"]):
+                if hero.stats["luck"] >= randint(1, 150):
+                    exp += int(self.xp // 2)
+                    break
+
+        exp = int(exp)
+        hero.exp += exp
+        engine.notify({"info": f"{exp} exp up"})
 
 
 class Hero(Creature):
 
     def __init__(self, stats, icon):
-        pos = [1, 1]
+        super().__init__(icon, stats, [1, 1])
         self.level = 1
         self.exp = 0
         self.gold = 0
-        super().__init__(icon, stats, pos)
+
+    @property
+    def max_exp(self):
+        return 100 * (2 ** (self.level - 1))
 
     def level_up(self):
-        while self.exp >= 100 * (2 ** (self.level - 1)):
-            yield "level up!"
+        while self.exp >= self.max_exp:
             self.level += 1
             self.stats["strength"] += 2
             self.stats["endurance"] += 2
             self.calc_max_HP()
             self.hp = self.max_hp
+            yield "level up!"
 
 
 class Effect(Hero):
@@ -120,10 +172,55 @@ class Effect(Hero):
     def sprite(self):
         return self.base.sprite
 
+    @sprite.setter
+    def sprite(self, value):
+        self.base.sprite = value
+
     @abstractmethod
     def apply_effect(self):
-        pass
+        self.calc_max_HP()
+        if self.max_hp < self.hp:
+            self.hp = self.max_hp
 
 
-# FIXME
-# add classes
+class Berserk(Effect):
+    def apply_effect(self):
+        self.stats["strength"] += 7
+        self.stats["endurance"] += 7
+        self.stats["intelligence"] -= 3
+        self.stats["luck"] += 7
+        super().apply_effect()
+
+
+class Blessing(Effect):
+    def apply_effect(self):
+        self.stats["strength"] += 2
+        self.stats["endurance"] += 2
+        self.stats["intelligence"] += 2
+        self.stats["luck"] += 2
+        super().apply_effect()
+
+
+class Weakness(Effect):
+    def apply_effect(self):
+        self.stats["strength"] -= 4
+        self.stats["endurance"] -= 4
+        super().apply_effect()
+
+
+class Sunset(Effect):
+    def __init__(self, base):
+        super().__init__(base)
+
+    @property
+    def position(self):
+        return self.base.position
+
+    @position.setter
+    def position(self, value):
+        self.exp += int(self.max_exp * 0.01)
+        self.base.position = value
+
+    def apply_effect(self):
+        super().apply_effect()
+
